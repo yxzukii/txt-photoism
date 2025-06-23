@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TXT 4-Cut Photobooth</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #fffee6;
+      margin: 0;
+      padding: 20px;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+      color: #fd1d18;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin: 20px 0;
+    }
+
+    select, button {
+      padding: 10px 14px;
+      font-size: 16px;
+      border-radius: 9px;
+      border: 1px solid #fd1d18;
+      background: #fffee6;
+    }
+
+    button {
+      background: #fd1d18;
+      color: #fffee6;
+      cursor: pointer;
+      border: none;
+    }
+
+    button:disabled {
+      background: #fe9f8f;
+      cursor: not-allowed;
+    }
+
+    .preview-area {
+      position: relative;
+      width: 370px;
+      max-width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+      background: black;
+    }
+
+    video, .frame-preview {
+      width: 100%;
+      display: block;
+    }
+
+    .frame-preview {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #countdown {
+      font-size: 40px;
+      font-weight: bold;
+      color: #d50000;
+      margin: 15px 0;
+      height: 40px;
+      text-align: center;
+    }
+
+    canvas {
+      margin-top: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h1>What's your love language?</h1>
+
+  <div class="controls">
+    <label>
+      Series:
+      <select id="seriesSelect">
+        <option value="dream-week">Dream Week</option>
+        <option value="tomorrow">Tomorrow</option>
+        <option value="sanctuary">Sanctuary</option>
+        <option value="love-language">Love Language</option>
+      </select>
+    </label>
+
+    <label>
+      Member:
+      <select id="memberSelect">
+        <option value="soobin">Soobin</option>
+        <option value="yeonjun">Yeonjun</option>
+        <option value="beomgyu">Beomgyu</option>
+        <option value="taehyun">Taehyun</option>
+        <option value="hueningkai">Huening Kai</option>
+      </select>
+    </label>
+
+    <button id="takeBtn">📸 Take Photo</button>
+    <button id="retakeBtn" style="display:none;">Retake All</button>
+  </div>
+
+  <div id="countdown"></div>
+
+  <div class="preview-area">
+    <video id="video" autoplay muted></video>
+    <img id="liveFrame" class="frame-preview" src="" />
+  </div>
+
+  <canvas id="canvas" width="741" height="2210"></canvas>
+
+  <script>
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const takeBtn = document.getElementById('takeBtn');
+  const countdownEl = document.getElementById('countdown');
+  const liveFrame = document.getElementById('liveFrame');
+  const seriesSelect = document.getElementById('seriesSelect');
+  const memberSelect = document.getElementById('memberSelect');
+
+  // (Opsional: Buat tombol Retake)
+  const retakeBtn = document.createElement('button');
+  retakeBtn.textContent = 'Retake';
+  retakeBtn.style.display = 'none';
+  retakeBtn.style.marginLeft = '10px';
+  document.querySelector('.controls').appendChild(retakeBtn);
+
+  const marginTop = 122.5;
+  const slotHeight = 501;
+  const slotGap = 8.5;
+  let photoIndex = 0;
+
+  function getFramePath(slot) {
+    const series = seriesSelect.value;
+    const member = memberSelect.value.toLowerCase().replace(/\s+/g, '');
+    return `frames/${series}/${member}/${slot}.png`;
+  }
+
+  function updateLiveFrame() {
+    if (photoIndex < 4) {
+      liveFrame.src = getFramePath(photoIndex + 1);
+    } else {
+      liveFrame.src = '';
+    }
+  }
+
+  seriesSelect.addEventListener('change', updateLiveFrame);
+  memberSelect.addEventListener('change', updateLiveFrame);
+  updateLiveFrame();
+
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => {
+      video.srcObject = stream;
+    });
+
+  function startCountdown(seconds) {
+    return new Promise(resolve => {
+      let counter = seconds;
+      countdownEl.innerText = counter;
+      const interval = setInterval(() => {
+        counter--;
+        countdownEl.innerText = counter;
+        if (counter === 0) {
+          clearInterval(interval);
+          countdownEl.innerText = '';
+          resolve();
+        }
+      }, 1000);
+    });
+  }
+
+  async function takePhoto() {
+    if (photoIndex >= 4) {
+      alert("Semua slot sudah terisi!");
+      return;
+    }
+
+    takeBtn.disabled = true;
+    await startCountdown(2);
+
+    const y = marginTop + photoIndex * (slotHeight + slotGap);
+    ctx.drawImage(video, 50, y, 641, slotHeight);
+
+    const overlay = new Image();
+    overlay.src = getFramePath(photoIndex + 1);
+
+    overlay.onload = () => {
+      ctx.drawImage(overlay, 50, y, 641, slotHeight);
+      photoIndex++;
+      updateLiveFrame();
+
+      if (photoIndex === 4) {
+        const finalFrame = new Image();
+        const series = seriesSelect.value;
+        finalFrame.src = `frames/${series}/frame.png`;
+
+        finalFrame.onload = () => {
+          ctx.drawImage(finalFrame, 0, 0, 741, 2210);
+
+          setTimeout(() => {
+            retakeBtn.style.display = 'inline-block';
+          }, 100);
+        };
+
+        finalFrame.onerror = () => {
+          console.error(`Gagal memuat frame final: ${finalFrame.src}`);
+        };
+      }
+
+      takeBtn.disabled = false;
+    };
+
+    overlay.onerror = () => {
+      console.error(`Gagal memuat overlay: ${overlay.src}`);
+      photoIndex++;
+      updateLiveFrame();
+      takeBtn.disabled = false;
+    };
+  }
+
+  function resetPhotobooth() {
+    photoIndex = 0;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    updateLiveFrame();
+    retakeBtn.style.display = 'none';
+  }
+
+  takeBtn.addEventListener('click', takePhoto);
+  retakeBtn.addEventListener('click', resetPhotobooth);
+
+</script>
+
+</body>
+</html>
